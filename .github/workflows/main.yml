@@ -1,0 +1,32 @@
+name: Package and Release
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write
+jobs:
+  build-and-deploy:
+    concurrency: ci-${{ github.ref }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Package
+        run: |
+          npm ci
+          npm run package
+
+      - name: Release
+        run: |
+          TAG=$(git rev-parse --short HEAD)
+          FOXE_FILE=$(ls *.foxe | head -n 1)
+          RENAMED_FILE="foxglove_px4-${TAG}.foxe"
+          mv "$FOXE_FILE" "$RENAMED_FILE"
+          gh release create "$TAG" \
+            --title "Release $TAG" \
+            --notes "Automated release from main branch" \
+            "$RENAMED_FILE"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
