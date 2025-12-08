@@ -1,14 +1,24 @@
-import { ExtensionContext, RegisterMessageConverterArgsTopic } from "@foxglove/extension";
+import {
+  ExtensionContext,
+  MessageEvent,
+  RegisterMessageConverterArgsTopic
+} from "@foxglove/extension";
 
 const euler = (inputTopic: string, quatName: string = "q"): RegisterMessageConverterArgsTopic => {
   return {
     type: "topic",
     inputTopics: [inputTopic],
     outputTopic: inputTopic + "_euler",
-    outputSchemaName: inputTopic,
+    outputSchemaName: inputTopic + "_euler",
+    outputSchemaDescription: {
+      roll: "number",
+      pitch: "number",
+      yaw: "number",
+    },
     create: () => {
-      return (msgEvent: any) => {
-        const q = msgEvent.message[quatName];
+      return (msgEvent: MessageEvent<any>) => {
+        const msg = msgEvent.message;
+        const q = msg[quatName];
 
         const w = q[0];
         const x = q[1];
@@ -31,10 +41,7 @@ const euler = (inputTopic: string, quatName: string = "q"): RegisterMessageConve
         const pitch = pitch_rad * 180 / Math.PI;
         const yaw = yaw_rad * 180 / Math.PI;
 
-        return {
-          ...msgEvent.message,
-          roll, pitch, yaw
-        };
+        return { roll, pitch, yaw };
       };
     },
   };
@@ -47,19 +54,20 @@ const degrees = (inputTopic: string): RegisterMessageConverterArgsTopic => {
     outputTopic: inputTopic + "_degrees",
     outputSchemaName: inputTopic,
     create: () => {
-      return (msgEvent: any) => {
-        const xyz = msgEvent.message["xyz"];
+      return (msgEvent: MessageEvent<any>) => {
+        const msg = msgEvent.message;
+        const xyz = msg["xyz"];
         const roll = xyz[0] * 180 / Math.PI;
         const pitch = xyz[1] * 180 / Math.PI;
         const yaw = xyz[2] * 180 / Math.PI;
 
-        const xyz_d = msgEvent.message["xyz_derivative"];
+        const xyz_d = msg["xyz_derivative"];
         const roll_d = xyz_d[0] * 180 / Math.PI;
         const pitch_d = xyz_d[1] * 180 / Math.PI;
         const yaw_d = xyz_d[2] * 180 / Math.PI;
 
         return {
-          ...msgEvent.message,
+          ...msg,
           xyz: [roll, pitch, yaw],
           xyz_d: [roll_d, pitch_d, yaw_d],
         };
@@ -68,25 +76,24 @@ const degrees = (inputTopic: string): RegisterMessageConverterArgsTopic => {
   };
 };
 
-const vehicle_rates_setpoint_degrees = (): RegisterMessageConverterArgsTopic => {
-  return {
-    type: "topic",
-    inputTopics: ["vehicle_rates_setpoint"],
-    outputTopic: "vehicle_rates_setpoint_degrees",
-    outputSchemaName: "vehicle_rates_setpoint",
-    create: () => {
-      return (msgEvent: any) => {
-        const roll = msgEvent.message["roll"] * 180 / Math.PI;
-        const pitch = msgEvent.message["pitch"] * 180 / Math.PI;
-        const yaw = msgEvent.message["yaw"] * 180 / Math.PI;
+const vehicle_rates_setpoint_degrees: RegisterMessageConverterArgsTopic = {
+  type: "topic",
+  inputTopics: ["vehicle_rates_setpoint"],
+  outputTopic: "vehicle_rates_setpoint_degrees",
+  outputSchemaName: "vehicle_rates_setpoint",
+  create: () => {
+    return (msgEvent: MessageEvent<any>) => {
+      const msg = msgEvent.message;
+      const roll = msg["roll"] * 180 / Math.PI;
+      const pitch = msg["pitch"] * 180 / Math.PI;
+      const yaw = msg["yaw"] * 180 / Math.PI;
 
-        return {
-          ...msgEvent.message,
-          roll, pitch, yaw
-        };
+      return {
+        ...msg,
+        roll, pitch, yaw
       };
-    },
-  };
+    };
+  },
 };
 
 export function activate(extensionContext: ExtensionContext): void {
@@ -95,5 +102,5 @@ export function activate(extensionContext: ExtensionContext): void {
   extensionContext.registerMessageConverter(euler("vehicle_attitude_groundtruth"));
   extensionContext.registerMessageConverter(degrees("vehicle_angular_velocity"));
   extensionContext.registerMessageConverter(degrees("vehicle_angular_velocity_groundtruth"));
-  extensionContext.registerMessageConverter(vehicle_rates_setpoint_degrees());
+  extensionContext.registerMessageConverter(vehicle_rates_setpoint_degrees);
 }
