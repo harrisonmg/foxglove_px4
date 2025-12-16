@@ -1,8 +1,22 @@
 import {
-  ExtensionContext,
+  Experimental,
   MessageEvent,
   RegisterMessageConverterArgsTopic
 } from "@foxglove/extension";
+
+import alpha_filter_source from "./alpha_filter.ts?raw";
+
+export function activate(extensionContext: Experimental.ExtensionContext): void {
+  extensionContext.registerUserScriptUtility({ name: "alpha_filter.ts", source: alpha_filter_source });
+
+  extensionContext.registerMessageConverter(euler("vehicle_attitude"));
+  extensionContext.registerMessageConverter(euler("vehicle_attitude_setpoint", "q_d"));
+  extensionContext.registerMessageConverter(euler("vehicle_attitude_groundtruth"));
+  extensionContext.registerMessageConverter(degrees("vehicle_angular_velocity"));
+  extensionContext.registerMessageConverter(degrees("vehicle_angular_velocity_groundtruth"));
+  extensionContext.registerMessageConverter(vehicle_rates_setpoint_degrees);
+  extensionContext.registerMessageConverter(mag_checks);
+}
 
 const euler = (inputTopic: string, quatName: string = "q"): RegisterMessageConverterArgsTopic => {
   return {
@@ -96,11 +110,45 @@ const vehicle_rates_setpoint_degrees: RegisterMessageConverterArgsTopic = {
   },
 };
 
-export function activate(extensionContext: ExtensionContext): void {
-  extensionContext.registerMessageConverter(euler("vehicle_attitude"));
-  extensionContext.registerMessageConverter(euler("vehicle_attitude_setpoint", "q_d"));
-  extensionContext.registerMessageConverter(euler("vehicle_attitude_groundtruth"));
-  extensionContext.registerMessageConverter(degrees("vehicle_angular_velocity"));
-  extensionContext.registerMessageConverter(degrees("vehicle_angular_velocity_groundtruth"));
-  extensionContext.registerMessageConverter(vehicle_rates_setpoint_degrees);
-}
+const mag_checks: RegisterMessageConverterArgsTopic = {
+  type: "topic",
+  inputTopics: ["estimator_status", "vehicle_status"],
+  outputTopic: "mag_checks",
+  outputSchemaName: "mag_checks",
+  outputSchemaDescription: {
+    strength_diff: "number",
+    strength_threshold: "number",
+    strength_check: "bool",
+    inclination_diff: "number",
+    inclination_threshold: "number",
+    inclination_check: "bool",
+    preflight_fail: "bool",
+  },
+  create: () => {
+    let armed = false;
+    return (msgEvent: MessageEvent<any>) => {
+      if (msgEvent.topic == "vehicle_status") {
+        armed = msgEvent.message.arming_state == 2;
+        return;
+      }
+
+      const msg = msgEvent.message;
+      const strength_diff = Math.abs(msg.mag_strength_gs - msg.mag_strength_ref_gs);
+      const strength_threshold = 0.075;
+      const strength_check = strength_diff <= strength_threshold;
+      const inclination_diff = Math.abs(msg.mag_inclination_deg - msg.mag_inclination_ref_deg);
+      const inclination_threshold = 8.0;
+      const inclination_check = inclination_diff <= inclination_threshold;
+      const preflight_fail = !armed && !(strength_check && inclination_check);
+      return {
+        strength_diff,
+        strength_threshold,
+        strength_check,
+        inclination_diff,
+        inclination_threshold,
+        inclination_check,
+        preflight_fail,
+      };
+    };
+  },
+};
